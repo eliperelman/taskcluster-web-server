@@ -11,12 +11,12 @@ import PulseEngine from './PulseEngine';
 const port = +process.env.PORT || 3050;
 
 process.on('uncaughtException', err => {
-  console.error(err); // eslint-disable-line no-console
+  console.error(err.toString()); // eslint-disable-line no-console
   process.exit(1);
 });
 
 process.on('unhandledRejection', reason => {
-  console.error(reason); // eslint-disable-line no-console
+  console.error(reason.toString()); // eslint-disable-line no-console
 });
 
 const pulseEngine = new PulseEngine({

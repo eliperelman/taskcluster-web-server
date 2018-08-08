@@ -3,8 +3,8 @@ import loaders from './loaders';
 
 export default ({ pulseEngine }) => ({ request, connection }) => {
   if (request) {
-    const currentClients = clients(request.user);
-    const currentLoaders = loaders(currentClients, !!request.user);
+    const currentClients = clients(request.credentials);
+    const currentLoaders = loaders(currentClients, !!request.credentials);
 
     return {
       clients: currentClients,
@@ -13,7 +13,7 @@ export default ({ pulseEngine }) => ({ request, connection }) => {
   } else if (connection) {
     return {
       pulseEngine,
-      clients: clients(connection.user),
+      clients: clients(connection.credentials),
     };
   }
 
