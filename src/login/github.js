@@ -3,6 +3,13 @@ import { Strategy } from 'passport-github';
 import { createTemporaryCredentials, fromNow } from 'taskcluster-client';
 
 export default app => {
+  if (!process.env.GITHUB_CLIENT_ID || !process.env.GITHUB_CLIENT_SECRET) {
+    throw new Error(
+      'Unable to use "github" login strategy without GITHUB_CLIENT_ID ' +
+        'and GITHUB_CLIENT_SECRET environment variables'
+    );
+  }
+
   const callback = '/login/github/callback';
 
   passport.use(

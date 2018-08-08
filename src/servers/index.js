@@ -34,11 +34,19 @@ export default ({ server, schema, context, https }) => {
     })
   );
 
-  process.env.LOGIN_STRATEGIES.split(' ').forEach(async strategy => {
-    const { default: loginStrategy } = await import(`../login/${strategy}`);
+  if (process.env.LOGIN_STRATEGIES) {
+    process.env.LOGIN_STRATEGIES.split(' ').forEach(async strategy => {
+      const { default: loginStrategy } = await import(`../login/${strategy}`);
 
-    loginStrategy(app);
-  });
+      loginStrategy(app);
+    });
+  } else {
+    // eslint-disable-next-line no-console
+    console.warn(
+      '\x1b[33m%s\x1b[0m',
+      'Application started with no LOGIN_STRATEGIES defined.'
+    );
+  }
 
   return {
     app,
