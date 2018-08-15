@@ -1,68 +1,72 @@
-import { PulseConnection, PulseListener } from 'taskcluster-client';
-import amqpMatch from 'amqp-match';
+import { Client } from 'taskcluster-lib-pulse';
+import { slugid } from 'taskcluster-client';
+import monitor from 'taskcluster-lib-monitor';
 import AsyncIterator from './AsyncIterator';
 
 export default class PulseEngine {
-  constructor(options = {}) {
-    const { connection } = options;
-
-    this.listening = false;
-    this.currentSubscriptionId = 0;
+  constructor() {
     this.subscriptions = new Map();
-    this.connection = new PulseConnection(connection);
-    this.listener = new PulseListener({
-      connection: this.connection,
-      rootUrl: process.env.TASKCLUSTER_ROOT_URL,
+    this.client = new Client({
+      username: process.env.PULSE_USERNAME,
+      password: process.env.PULSE_PASSWORD,
+      hostname: process.env.PULSE_HOSTNAME,
+      vhost: process.env.PULSE_VHOST,
+      monitor: monitor({
+        rootUrl: process.env.TASKCLUSTER_ROOT_URL,
+        projectName: 'taskcluster-web-server',
+        credentials: {
+          clientId: process.env.TASKCLUSTER_CLIENT_ID,
+          accessToken: process.env.TASKCLUSTER_ACCESS_TOKEN,
+        },
+        mock: process.env.NODE_ENV !== 'production',
+        enable: process.env.NODE_ENV === 'production',
+      }),
     });
 
-    this.listener.on('message', this.handleMessage.bind(this));
-  }
-
-  handleMessage(message) {
-    [...this.subscriptions.values()].forEach(
-      ({ bindings, eventName, onMessage }) => {
-        bindings.forEach(({ exchange, routingKeyPattern }) => {
-          if (
-            message.exchange === exchange &&
-            amqpMatch(message.routingKey, routingKeyPattern)
-          ) {
-            onMessage({ [eventName]: message.payload });
-          }
-        });
-      }
+    this.connection = new Promise(
+      this.client.on.bind(this.client, 'connected')
     );
   }
 
   async subscribe({ eventName, triggers }, onMessage) {
-    const id = this.currentSubscriptionId;
-    const bindings = [];
+    const connection = await this.connection;
 
-    Object.entries(triggers).forEach(([routingKeyPattern, exchanges]) => {
-      exchanges.forEach(exchange => {
-        const binding = { exchange, routingKeyPattern };
+    try {
+      const channel = await connection.amqp.createChannel();
+      const queueName = this.client.fullObjectName('queue', slugid());
 
-        this.listener.bind(binding);
-        bindings.push(binding);
+      await channel.assertQueue(queueName, {
+        exclusive: false,
+        durable: true,
+        autoDelete: true,
       });
-    });
-    this.subscriptions.set(id, { eventName, bindings, onMessage });
-    this.currentSubscriptionId = this.currentSubscriptionId + 1;
 
-    if (!this.listening) {
-      await this.listener.resume();
-      this.listening = true;
+      Object.entries(triggers).forEach(([routingKeyPattern, exchanges]) => {
+        exchanges.forEach(async exchange => {
+          await channel.assertExchange(exchange, 'topic');
+          await channel.bindQueue(queueName, exchange, routingKeyPattern);
+        });
+      });
+
+      const consumer = await channel.consume(queueName, message => {
+        onMessage({ [eventName]: message.payload });
+      });
+
+      connection.on('retiring', () => {
+        // ignore errors in this call: the connection is already retiring..
+        channel.cancel(consumer.consumerTag).catch(() => {});
+      });
+      this.subscriptions.set(queueName, { eventName, onMessage });
+
+      return queueName;
+    } catch (err) {
+      connection.failed();
+      throw err;
     }
-
-    return id;
   }
 
   async unsubscribe(subscriptionId) {
     this.subscriptions.delete(subscriptionId);
-
-    if (!this.subscriptions.size) {
-      await this.listener.pause();
-      this.listening = false;
-    }
   }
 
   asyncIterator(eventName, triggers) {

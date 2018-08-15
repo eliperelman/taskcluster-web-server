@@ -17,7 +17,6 @@
     "raw-loader": "^0.5.1"
   },
   "dependencies": {
-    "amqp-match": "^0.0.0",
     "apollo-server-express": "^1.3.4",
     "body-parser-graphql": "^1.0.0",
     "compress": "^0.99.0",
@@ -42,6 +41,8 @@
     "sift": "^6.0.0",
     "source-map-support": "^0.5.4",
     "subscriptions-transport-ws": "^0.9.14",
-    "taskcluster-client": "^11.0.3"
+    "taskcluster-client": "^11.0.3",
+    "taskcluster-lib-monitor": "^10.0.0",
+    "taskcluster-lib-pulse": "^1.1.0"
   }
 }
